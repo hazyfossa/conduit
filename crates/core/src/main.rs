@@ -15,6 +15,7 @@ use wry::{
 use crate::actions::create_ipc_host;
 
 mod actions;
+mod assets;
 mod utils;
 
 const PROJECT_NAME: &str = "TODO";
@@ -24,44 +25,6 @@ pub type Data = Cow<'static, [u8]>;
 pub fn http_err(status: StatusCode) -> Response<Data> {
     let empty = Data::Owned(Vec::new());
     Response::builder().status(status).body(empty).unwrap()
-}
-
-mod assets {
-    use super::{Data, http_err};
-    use rust_embed::Embed;
-    use wry::http::{Method, Request, Response, StatusCode, header::CONTENT_TYPE};
-
-    #[derive(Embed)]
-    #[folder = "../../test/assets/"]
-    #[prefix = "/"]
-    pub struct Assets;
-
-    pub fn content_handler(_webview_id: &str, request: Request<Vec<u8>>) -> Response<Data> {
-        if request.method() != Method::GET {
-            return http_err(StatusCode::METHOD_NOT_ALLOWED);
-        }
-
-        let subproject = request.uri().host().unwrap_or_default();
-        let resource = request.uri().path();
-
-        // TODO: for an empty subproject (request resource from root),
-        // this will likely fail because of unneccessary '/' prefix.
-        // TODO: ponder whether making subprojects completely different
-        // (trust) domains is the right call
-        let mut path = format!("{subproject}/{resource}");
-        if path.ends_with('/') {
-            path.push_str("index.html");
-        }
-
-        match Assets::get(&path) {
-            Some(content) => Response::builder()
-                .header(CONTENT_TYPE, content.metadata.mimetype())
-                .body(content.data)
-                .unwrap(),
-
-            None => http_err(StatusCode::NOT_FOUND),
-        }
-    }
 }
 
 fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindowResponse {
@@ -89,7 +52,7 @@ fn load_project() -> bool {
 fn lock_aspect_ratio(window: &Window) {
     let size = window.inner_size();
     let aspect_ratio = size.width as f64 / size.height as f64;
-    // winwin::window::lock_aspect_ratio(window, aspect_ratio)
+    winwin::aspect_ratio::lock_aspect_ratio(window, aspect_ratio)
 }
 
 fn create_window(event_loop: &EventLoop<()>, fullscreen: bool) -> Result<Rc<Window>> {
@@ -155,7 +118,7 @@ fn main() -> Result<()> {
 
     let webview_settings = WebViewBuilder::new()
         .with_url(location_url(0))
-        .with_custom_protocol("bundled".to_string(), assets::content_handler)
+        // .with_custom_protocol("bundled".to_string(), assets::content_handler)
         // .with_asynchronous_custom_protocol("state".to_string(), storage_protocol)
         .with_ipc_handler(ipc_host)
         .with_new_window_req_handler(handle_window_request)
