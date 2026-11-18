@@ -18,3 +18,16 @@ pub mod warn {
         }
     }
 }
+
+pub mod http {
+    use std::borrow::Cow;
+
+    use wry::http::{Response, StatusCode};
+
+    pub type Data = Cow<'static, [u8]>;
+
+    pub fn http_err(status: StatusCode) -> Response<Data> {
+        let empty = Data::Owned(Vec::new());
+        Response::builder().status(status).body(empty).unwrap()
+    }
+}

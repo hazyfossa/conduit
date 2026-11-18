@@ -1,4 +1,4 @@
-use std::{borrow::Cow, rc::Rc};
+use std::rc::Rc;
 
 use eyre::{Context, Result};
 use tao::{
@@ -7,25 +7,15 @@ use tao::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Fullscreen, Theme, Window, WindowBuilder},
 };
-use wry::{
-    NewWindowFeatures, NewWindowResponse, WebViewBuilder,
-    http::{Response, StatusCode},
-};
+use wry::{NewWindowFeatures, NewWindowResponse, WebViewBuilder};
 
-use crate::actions::create_ipc_host;
+use crate::{actions::create_ipc_host, assets::create_asset_handler};
 
 mod actions;
 mod assets;
 mod utils;
 
 const PROJECT_NAME: &str = "TODO";
-
-pub type Data = Cow<'static, [u8]>;
-
-pub fn http_err(status: StatusCode) -> Response<Data> {
-    let empty = Data::Owned(Vec::new());
-    Response::builder().status(status).body(empty).unwrap()
-}
 
 fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindowResponse {
     tracing::debug!("New window: {url}");
@@ -70,7 +60,7 @@ fn create_window(event_loop: &EventLoop<()>, fullscreen: bool) -> Result<Rc<Wind
 
     #[cfg(target_os = "windows")]
     if !fullscreen {
-        // TODO: confirm no performance impact from wfix on main loop
+        // TODO: confirm no performance impact from winwin on main loop
         lock_aspect_ratio(&window);
     }
 
@@ -109,8 +99,8 @@ fn main() -> Result<()> {
     let event_loop = EventLoopBuilder::with_user_event().build();
 
     let window = create_window(&event_loop, false)?;
-
     let ipc_host = create_ipc_host(window.clone());
+    let asset_handler = create_asset_handler()?;
 
     // let storage = Storage::open_in_appdata(PROJECT_NAME).expect("Storage init failed");
     // let storage_protocol =
@@ -118,7 +108,7 @@ fn main() -> Result<()> {
 
     let webview_settings = WebViewBuilder::new()
         .with_url(location_url(0))
-        // .with_custom_protocol("bundled".to_string(), assets::content_handler)
+        .with_custom_protocol("bundled".to_string(), asset_handler)
         // .with_asynchronous_custom_protocol("state".to_string(), storage_protocol)
         .with_ipc_handler(ipc_host)
         .with_new_window_req_handler(handle_window_request)
