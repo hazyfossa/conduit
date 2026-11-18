@@ -3,6 +3,7 @@ use std::fs;
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use eyre::{Context, Result};
+use mime_guess::Mime;
 use rkyv::{Archive, Serialize, rancor, util::AlignedVec};
 
 #[derive(Archive, Serialize)]
@@ -12,17 +13,23 @@ struct Manifest {
 
 #[derive(Archive, Serialize)]
 struct FileEntry {
-    key: String,
+    path: String,
     data: Vec<u8>,
 }
 
 pub struct Asset<'a> {
-    pub data: &'a [u8],
+    file: &'a ArchivedFileEntry,
 }
 
 impl<'a> Asset<'a> {
-    pub fn mimetype(&self) -> String {
-        todo!()
+    pub fn data(&self) -> &'a [u8] {
+        &self.file.data
+    }
+
+    pub fn mimetype(&self) -> Mime {
+        let path = self.file.path.as_str();
+        let guess = mime_guess::from_path(path);
+        guess.first_or_octet_stream()
     }
 }
 
@@ -44,14 +51,14 @@ pub fn encode_dir(root: &Utf8Path) -> Result<AlignedVec> {
                     .context("walk escaped from directory root")?;
 
                 entries.push(FileEntry {
-                    key: relative_key(rel),
+                    path: relative_key(rel),
                     data: fs::read(&path)?,
                 });
             }
         }
     }
 
-    entries.sort_unstable_by(|a, b| a.key.split('/').cmp(b.key.split('/')));
+    entries.sort_unstable_by(|a, b| a.path.split('/').cmp(b.path.split('/')));
 
     let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&Manifest { entries })?;
     Ok(bytes)
@@ -73,15 +80,15 @@ impl<'a> Assets<'a> {
     }
 
     pub fn get(&self, path: &str) -> Option<Asset<'a>> {
-        let entries = self.manifest.entries.as_slice();
+        let entries = &self.manifest.entries;
 
         let idx = entries
-            .binary_search_by(|e| cmp_key_path(e.key.as_str(), path.into()))
+            .binary_search_by(|e| cmp_key_path(e.path.as_str(), &path))
             .ok()?;
 
         let file = &entries[idx];
 
-        Some(Asset { data: &file.data })
+        Some(Asset { file })
     }
 
     pub fn len(&self) -> usize {
@@ -92,7 +99,7 @@ impl<'a> Assets<'a> {
         self.manifest
             .entries
             .iter()
-            .map(|e| (e.key.as_str(), e.data.as_slice()))
+            .map(|e| (e.path.as_str(), e.data.as_slice()))
     }
 }
 

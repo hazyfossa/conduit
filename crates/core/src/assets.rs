@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use crate::utils::http::{Data, http_err};
 use conduit_blob::Assets;
 use eyre::{Context, Result};
@@ -13,10 +15,10 @@ pub fn load() -> Result<Assets<'static>> {
 
 type AssetRequest = Request<Vec<u8>>;
 
-pub fn create_asset_handler() -> Result<impl Fn(&str, AssetRequest) -> Response<Data>> {
-    let assets = load()?;
+static ASSETS: LazyLock<Assets<'static>> = LazyLock::new(|| load().unwrap());
 
-    let handler = move |_webview_id: &str, request: AssetRequest| {
+pub fn create_asset_handler() -> impl Fn(&str, AssetRequest) -> Response<Data> {
+    move |_webview_id: &str, request: AssetRequest| {
         if request.method() != Method::GET {
             return http_err(StatusCode::METHOD_NOT_ALLOWED);
         }
@@ -33,15 +35,17 @@ pub fn create_asset_handler() -> Result<impl Fn(&str, AssetRequest) -> Response<
             path.push_str("index.html");
         }
 
-        match assets.get(&path) {
-            Some(file) => Response::builder()
-                .header(CONTENT_TYPE, file.mimetype())
-                .body(file.data.into())
-                .unwrap(),
+        match ASSETS.get(&path) {
+            Some(file) => {
+                let data = file.data().into();
+
+                Response::builder()
+                    .header(CONTENT_TYPE, file.mimetype().to_string())
+                    .body(data)
+                    .unwrap()
+            }
 
             None => http_err(StatusCode::NOT_FOUND),
         }
-    };
-
-    Ok(handler)
+    }
 }

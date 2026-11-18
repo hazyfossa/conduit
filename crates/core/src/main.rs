@@ -100,7 +100,7 @@ fn main() -> Result<()> {
 
     let window = create_window(&event_loop, false)?;
     let ipc_host = create_ipc_host(window.clone());
-    let asset_handler = create_asset_handler()?;
+    let asset_handler = create_asset_handler();
 
     // let storage = Storage::open_in_appdata(PROJECT_NAME).expect("Storage init failed");
     // let storage_protocol =
