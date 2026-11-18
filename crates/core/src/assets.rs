@@ -1,10 +1,10 @@
 use std::sync::LazyLock;
 
 use crate::utils::http::{Data, http_err};
-use conduit_blob::Assets;
+use conduit_common::blob::Assets;
 use eyre::{Context, Result};
 use winwin::blob::{ResourceId, load_resouse_blob};
-use wry::http::{Method, Request, Response, StatusCode, header::CONTENT_TYPE};
+use wry::http::{HeaderValue, Method, Request, Response, StatusCode, header::CONTENT_TYPE};
 
 pub fn load() -> Result<Assets<'static>> {
     let bytes = load_resouse_blob(ResourceId::Text("CONDUIT"))?;
@@ -37,12 +37,14 @@ pub fn create_asset_handler() -> impl Fn(&str, AssetRequest) -> Response<Data> {
 
         match ASSETS.get(&path) {
             Some(file) => {
-                let data = file.data().into();
+                let mut response = Response::new(file.data().into());
 
-                Response::builder()
-                    .header(CONTENT_TYPE, file.mimetype().to_string())
-                    .body(data)
-                    .unwrap()
+                if let Some(mime_type) = file.mimetype() {
+                    let header = HeaderValue::from_static(mime_type);
+                    response.headers_mut().insert(CONTENT_TYPE, header);
+                }
+
+                response
             }
 
             None => http_err(StatusCode::NOT_FOUND),
