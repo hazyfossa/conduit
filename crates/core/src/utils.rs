@@ -34,9 +34,15 @@ pub mod http {
 }
 
 pub mod window {
-    use tao::window::Fullscreen;
+    use tao::window::{Fullscreen, Window};
 
     pub fn maybe_fullscreen(value: bool) -> Option<Fullscreen> {
         value.then_some(Fullscreen::Borderless(None))
+    }
+
+    pub fn lock_aspect_ratio(window: &Window) {
+        let size = window.inner_size();
+        let aspect_ratio = size.width as f64 / size.height as f64;
+        winwin::aspect_ratio::lock_aspect_ratio(window, aspect_ratio)
     }
 }

@@ -8,11 +8,13 @@ use tao::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Theme, Window, WindowBuilder},
 };
-use wry::{NewWindowFeatures, NewWindowResponse, WebViewBuilder};
+use wry::{NewWindowFeatures, NewWindowResponse, WebView, WebViewBuilder};
 
 use crate::{
-    actions::create_ipc_host, assets::create_asset_handler, storage::create_storage_handler,
-    utils::window::maybe_fullscreen,
+    actions::create_ipc_host,
+    assets::create_asset_handler,
+    storage::create_storage_handler,
+    utils::window::{lock_aspect_ratio, maybe_fullscreen},
 };
 
 mod actions;
@@ -57,13 +59,7 @@ static PROJECT: LazyLock<Project> = LazyLock::new(|| {
     project
 });
 
-fn lock_aspect_ratio(window: &Window) {
-    let size = window.inner_size();
-    let aspect_ratio = size.width as f64 / size.height as f64;
-    winwin::aspect_ratio::lock_aspect_ratio(window, aspect_ratio)
-}
-
-fn create_window(event_loop: &EventLoop<()>) -> Result<Window> {
+fn create_window(event_loop: &EventLoop<()>) -> Result<&Window> {
     let title = PROJECT.name.to_string();
     let size = PhysicalSize::new(PROJECT.width.to_native(), PROJECT.height.to_native());
     let fullscreen = false; // TODO: settings
@@ -77,13 +73,33 @@ fn create_window(event_loop: &EventLoop<()>) -> Result<Window> {
         .build(event_loop)
         .context("Failed to create window")?;
 
-    #[cfg(target_os = "windows")]
-    if !fullscreen {
-        // TODO: confirm no performance impact from winwin on main loop
-        lock_aspect_ratio(&window);
+    // TODO: confirm no performance impact from winwin on main loop
+    lock_aspect_ratio(&window);
+
+    if PROJECT.custom_cursor {
+        window.set_cursor_visible(false);
     }
 
-    Ok(window)
+    let _ = WINDOW.set(window);
+    Ok(current_window())
+}
+
+fn create_webview() -> Result<WebView> {
+    let ipc_host = create_ipc_host();
+    let asset_handler = create_asset_handler();
+    let storage_handler = create_storage_handler();
+
+    let webview_settings = WebViewBuilder::new()
+        .with_url(location_url(0))
+        .with_ipc_handler(ipc_host)
+        .with_custom_protocol("bundled".to_string(), asset_handler)
+        .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
+        .with_new_window_req_handler(handle_window_request)
+        .with_devtools(Project::is_debug());
+
+    webview_settings
+        .build(current_window())
+        .context("Webview init failed")
 }
 
 fn run_loop(event_loop: EventLoop<()>) -> ! {
@@ -110,24 +126,11 @@ fn location_url(id: u8) -> String {
 
 fn main() -> Result<()> {
     init_tracing();
-    let event_loop = EventLoopBuilder::with_user_event().build();
 
-    let window = create_window(&event_loop)?;
-    let ipc_host = create_ipc_host();
-    let asset_handler = create_asset_handler();
-    let storage_handler = create_storage_handler();
+    let event_loop = EventLoopBuilder::new().build();
 
-    let webview_settings = WebViewBuilder::new()
-        .with_url(location_url(0))
-        .with_ipc_handler(ipc_host)
-        .with_custom_protocol("bundled".to_string(), asset_handler)
-        .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
-        .with_new_window_req_handler(handle_window_request)
-        .with_devtools(Project::is_debug());
-
-    let _webview = webview_settings
-        .build(&window)
-        .context("Webview init failed")?;
+    let _window = create_window(&event_loop)?;
+    let _webview = create_webview();
 
     run_loop(event_loop)
 }

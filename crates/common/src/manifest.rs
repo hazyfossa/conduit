@@ -6,6 +6,5 @@ pub struct Manifest {
     pub version: String,
     pub width: u16,
     pub height: u16,
-    pub resizable: bool,
     pub custom_cursor: bool,
 }

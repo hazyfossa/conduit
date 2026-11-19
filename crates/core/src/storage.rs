@@ -42,6 +42,7 @@ impl Storage {
     }
 
     // TODO: this is very memory-inefficient
+    #[allow(unused)] // TODO: list saves, select save
     fn list_saves(&self) -> Vec<String> {
         let list = self.db.list_keyspace_names();
 
