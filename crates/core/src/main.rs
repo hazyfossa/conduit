@@ -11,11 +11,13 @@ use tao::{
 use wry::{NewWindowFeatures, NewWindowResponse, WebViewBuilder};
 
 use crate::{
-    actions::create_ipc_host, assets::create_asset_handler, utils::window::maybe_fullscreen,
+    actions::create_ipc_host, assets::create_asset_handler, storage::create_storage_handler,
+    utils::window::maybe_fullscreen,
 };
 
 mod actions;
 mod assets;
+mod storage;
 mod utils;
 
 static WINDOW: OnceLock<Window> = OnceLock::new();
@@ -113,16 +115,13 @@ fn main() -> Result<()> {
     let window = create_window(&event_loop)?;
     let ipc_host = create_ipc_host();
     let asset_handler = create_asset_handler();
-
-    // let storage = Storage::open_in_appdata(PROJECT_NAME).expect("Storage init failed");
-    // let storage_protocol =
-    //     move |_: &str, request, ret| persist::state_handler(&storage, request, ret);
+    let storage_handler = create_storage_handler()?;
 
     let webview_settings = WebViewBuilder::new()
         .with_url(location_url(0))
-        .with_custom_protocol("bundled".to_string(), asset_handler)
-        // .with_asynchronous_custom_protocol("state".to_string(), storage_protocol)
         .with_ipc_handler(ipc_host)
+        .with_custom_protocol("bundled".to_string(), asset_handler)
+        .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
         .with_new_window_req_handler(handle_window_request)
         .with_devtools(Project::is_debug());
 
