@@ -1,19 +1,10 @@
-use std::sync::LazyLock;
-
-use crate::utils::http::{Data, http_err};
-use conduit_common::Project;
-use eyre::{Context, Result};
-use winwin::blob::{ResourceId, load_resouse_blob};
+use crate::{
+    PROJECT,
+    utils::http::{Data, http_err},
+};
 use wry::http::{HeaderValue, Method, Request, Response, StatusCode, header::CONTENT_TYPE};
 
-pub fn load() -> Result<Project> {
-    let bytes = load_resouse_blob(ResourceId::Text("CONDUIT"))?;
-    Project::load_from_bytes(bytes).context("Decoding failure")
-}
-
 type AssetRequest = Request<Vec<u8>>;
-
-static PROJECT: LazyLock<Project> = LazyLock::new(|| load().unwrap());
 
 pub fn create_asset_handler() -> impl Fn(&str, AssetRequest) -> Response<Data> {
     move |_webview_id: &str, request: AssetRequest| {

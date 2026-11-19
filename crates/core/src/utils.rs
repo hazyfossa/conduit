@@ -33,15 +33,9 @@ pub mod http {
 }
 
 pub mod window {
-    use tao::window::{Fullscreen, Window};
+    use tao::window::Fullscreen;
 
-    pub trait WindowExt {
-        fn set_fullscreen_simple(&self, value: bool);
-    }
-
-    impl WindowExt for Window {
-        fn set_fullscreen_simple(&self, value: bool) {
-            self.set_fullscreen(value.then_some(Fullscreen::Borderless(None)));
-        }
+    pub fn maybe_fullscreen(value: bool) -> Option<Fullscreen> {
+        value.then_some(Fullscreen::Borderless(None))
     }
 }

@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use eyre::{Context, OptionExt, Result};
 
 use crate::{blob::Assets, manifest::ArchivedManifest};
@@ -15,22 +17,34 @@ where
 
 pub struct Project {
     pub assets: Assets<'static>,
+    pub manifest: &'static ArchivedManifest,
+}
+
+impl Deref for Project {
+    type Target = &'static ArchivedManifest;
+    fn deref(&self) -> &Self::Target {
+        &self.manifest
+    }
 }
 
 impl Project {
     pub fn load_from_bytes(bytes: &'static [u8]) -> Result<Self> {
         let dir = zerocopy_open(bytes)?;
         let assets = Assets { dir };
-        Ok(Self { assets })
-    }
 
-    pub fn manifest(&self) -> Result<&'static ArchivedManifest> {
-        let data = self
-            .assets
+        let manifest_data = assets
             .get("/manifest")
             .ok_or_eyre("This project does not bundle a manifest")?
             .data();
 
-        zerocopy_open(data)
+        let manifest = zerocopy_open(manifest_data)?;
+
+        Ok(Self { assets, manifest })
+    }
+
+    #[rustfmt::skip]
+    pub const fn is_debug() -> bool {
+        #[cfg(debug_assertions)] { true }
+        #[cfg(not(debug_assertions))] { false }
     }
 }

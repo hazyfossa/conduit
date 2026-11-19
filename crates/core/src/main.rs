@@ -1,43 +1,59 @@
-use std::rc::Rc;
+use std::sync::{LazyLock, OnceLock};
 
+use conduit_common::Project;
 use eyre::{Context, Result};
 use tao::{
     dpi::PhysicalSize,
     event::{Event as SystemEvent, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
-    window::{Fullscreen, Theme, Window, WindowBuilder},
+    window::{Theme, Window, WindowBuilder},
 };
 use wry::{NewWindowFeatures, NewWindowResponse, WebViewBuilder};
 
-use crate::{actions::create_ipc_host, assets::create_asset_handler};
+use crate::{
+    actions::create_ipc_host, assets::create_asset_handler, utils::window::maybe_fullscreen,
+};
 
 mod actions;
 mod assets;
 mod utils;
 
-const PROJECT_NAME: &str = "TODO";
+static WINDOW: OnceLock<Window> = OnceLock::new();
+fn current_window() -> &'static Window {
+    WINDOW.get().expect("Primary window not initialized")
+}
 
 fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindowResponse {
-    tracing::debug!("New window: {url}");
-    NewWindowResponse::Allow
+    tracing::error!(
+        "Unexpected new-window request for: {url}. Currently, conduit only supports one window."
+    );
+    NewWindowResponse::Deny
 }
 
-// Returns `DEBUG` flag
-fn load_project() -> bool {
-    #[cfg(debug_assertions)]
-    const DEBUG: bool = true;
-    #[cfg(not(debug_assertions))]
-    const DEBUG: bool = false;
+static PROJECT: LazyLock<Project> = LazyLock::new(|| {
+    const CONDUIT_VERSION: &str = env!("CARGO_PKG_VERSION");
+    const CONDUIT_BUILD_ID: u64 = const_random::const_random!(u64);
 
-    const VERSION: &str = env!("CARGO_PKG_VERSION");
-    const BUILD_ID: u64 = const_random::const_random!(u64);
+    let build_kind = if Project::is_debug() {
+        "debug"
+    } else {
+        "release"
+    };
 
-    let build_kind = if DEBUG { "debug" } else { "release" };
+    let project = winwin::blob::load_resouse_blob("CONDUIT")
+        .map_err(eyre::Error::from)
+        .and_then(Project::load_from_bytes)
+        .expect("Failed to load bundled project");
 
-    tracing::info!("Running {PROJECT_NAME} {VERSION} {build_kind} build [{BUILD_ID:x}]");
+    let name = &project.manifest.name;
+    let version = &project.manifest.version;
 
-    DEBUG
-}
+    tracing::info!(
+        "Running [{name}-{version}-{build_kind}] using [conduit-{CONDUIT_VERSION}-{CONDUIT_BUILD_ID:x}]"
+    );
+
+    project
+});
 
 fn lock_aspect_ratio(window: &Window) {
     let size = window.inner_size();
@@ -45,16 +61,17 @@ fn lock_aspect_ratio(window: &Window) {
     winwin::aspect_ratio::lock_aspect_ratio(window, aspect_ratio)
 }
 
-fn create_window(event_loop: &EventLoop<()>, fullscreen: bool) -> Result<Rc<Window>> {
-    const CONSTRUCT_WIDTH: u32 = 1920;
-    const CONSTRUCT_HEIGHT: u32 = 1080;
+fn create_window(event_loop: &EventLoop<()>) -> Result<Window> {
+    let title = PROJECT.name.to_string();
+    let size = PhysicalSize::new(PROJECT.width.to_native(), PROJECT.height.to_native());
+    let fullscreen = false; // TODO: settings
 
     let window = WindowBuilder::new()
-        .with_title(PROJECT_NAME)
-        .with_inner_size(PhysicalSize::new(CONSTRUCT_WIDTH, CONSTRUCT_HEIGHT))
-        .with_fullscreen(fullscreen.then_some(Fullscreen::Borderless(None)))
+        .with_title(title)
+        .with_inner_size(size)
         .with_focused(true)
-        .with_theme(Some(Theme::Dark))
+        .with_theme(Some(Theme::Dark)) // TODO
+        .with_fullscreen(maybe_fullscreen(fullscreen))
         .build(event_loop)
         .context("Failed to create window")?;
 
@@ -64,10 +81,7 @@ fn create_window(event_loop: &EventLoop<()>, fullscreen: bool) -> Result<Rc<Wind
         lock_aspect_ratio(&window);
     }
 
-    // refcount is required since rustc cannot prove `window` is aliмe while `ipc_host`
-    // is alive. We can rewrite without it by deferring window-requring parts of `ipc_host` to event_loop
-    // over event_proxy, but that is not trivial to implement
-    Ok(Rc::new(window))
+    Ok(window)
 }
 
 fn run_loop(event_loop: EventLoop<()>) -> ! {
@@ -94,12 +108,10 @@ fn location_url(id: u8) -> String {
 
 fn main() -> Result<()> {
     init_tracing();
-    let is_debug = load_project();
-
     let event_loop = EventLoopBuilder::with_user_event().build();
 
-    let window = create_window(&event_loop, false)?;
-    let ipc_host = create_ipc_host(window.clone());
+    let window = create_window(&event_loop)?;
+    let ipc_host = create_ipc_host();
     let asset_handler = create_asset_handler();
 
     // let storage = Storage::open_in_appdata(PROJECT_NAME).expect("Storage init failed");
@@ -112,7 +124,7 @@ fn main() -> Result<()> {
         // .with_asynchronous_custom_protocol("state".to_string(), storage_protocol)
         .with_ipc_handler(ipc_host)
         .with_new_window_req_handler(handle_window_request)
-        .with_devtools(is_debug);
+        .with_devtools(Project::is_debug());
 
     let _webview = webview_settings
         .build(&window)

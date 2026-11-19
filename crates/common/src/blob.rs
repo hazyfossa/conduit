@@ -25,6 +25,7 @@ impl<'a> Asset<'a> {
 }
 
 #[derive(Archive, Serialize)]
+#[allow(unused, reason = "only the archived variant is used")]
 pub(crate) struct Directory {
     entries: Vec<File>,
 }
