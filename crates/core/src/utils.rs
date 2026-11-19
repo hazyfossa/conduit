@@ -31,3 +31,17 @@ pub mod http {
         Response::builder().status(status).body(empty).unwrap()
     }
 }
+
+pub mod window {
+    use tao::window::{Fullscreen, Window};
+
+    pub trait WindowExt {
+        fn set_fullscreen_simple(&self, value: bool);
+    }
+
+    impl WindowExt for Window {
+        fn set_fullscreen_simple(&self, value: bool) {
+            self.set_fullscreen(value.then_some(Fullscreen::Borderless(None)));
+        }
+    }
+}

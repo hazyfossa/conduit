@@ -1,23 +1,17 @@
 use std::cmp::Ordering;
 
 use camino::{Utf8Component, Utf8Path};
-use eyre::Result;
-use rkyv::{Archive, Serialize, rancor};
+use rkyv::{Archive, Serialize};
 
 #[derive(Archive, Serialize)]
-struct Manifest {
-    entries: Vec<FileEntry>,
-}
-
-#[derive(Archive, Serialize)]
-struct FileEntry {
+struct File {
     path: String,
     mime_type: Option<String>,
     data: Vec<u8>,
 }
 
 pub struct Asset<'a> {
-    file: &'a ArchivedFileEntry,
+    file: &'a ArchivedFile,
 }
 
 impl<'a> Asset<'a> {
@@ -30,23 +24,18 @@ impl<'a> Asset<'a> {
     }
 }
 
+#[derive(Archive, Serialize)]
+pub(crate) struct Directory {
+    entries: Vec<File>,
+}
+
 pub struct Assets<'a> {
-    manifest: &'a ArchivedManifest,
+    pub(crate) dir: &'a ArchivedDirectory,
 }
 
 impl<'a> Assets<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self> {
-        let manifest = rkyv::access::<_, rancor::Error>(bytes)?;
-        Ok(Self { manifest })
-    }
-
-    pub unsafe fn from_bytes_unchecked(bytes: &'a [u8]) -> Self {
-        let manifest = unsafe { rkyv::access_unchecked(bytes) };
-        Self { manifest }
-    }
-
     pub fn get(&self, path: &str) -> Option<Asset<'a>> {
-        let entries = &self.manifest.entries;
+        let entries = &self.dir.entries;
 
         let idx = entries
             .binary_search_by(|e| cmp_key_path(e.path.as_str(), &path))
@@ -58,11 +47,11 @@ impl<'a> Assets<'a> {
     }
 
     pub fn len(&self) -> usize {
-        self.manifest.entries.len()
+        self.dir.entries.len()
     }
 
     pub fn iter_all(&self) -> impl Iterator<Item = (&'a str, &'a [u8])> {
-        self.manifest
+        self.dir
             .entries
             .iter()
             .map(|e| (e.path.as_str(), e.data.as_slice()))
@@ -102,7 +91,7 @@ pub mod write {
 
     use super::*;
 
-    fn encode_file(root: &Utf8Path, path: Utf8PathBuf) -> Result<FileEntry> {
+    fn encode_file(root: &Utf8Path, path: Utf8PathBuf) -> Result<File> {
         let rel = path
             .strip_prefix(root)
             .context("walk escaped from directory root")?;
@@ -112,7 +101,7 @@ pub mod write {
 
         let data = fs::read(&path)?;
 
-        Ok(FileEntry {
+        Ok(File {
             path,
             mime_type,
             data,
@@ -140,7 +129,7 @@ pub mod write {
 
         entries.sort_unstable_by(|a, b| a.path.split('/').cmp(b.path.split('/')));
 
-        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&Manifest { entries })?;
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&Directory { entries })?;
         Ok(bytes)
     }
 
