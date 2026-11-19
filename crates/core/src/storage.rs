@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use eyre::Result;
 use fjall::KeyspaceCreateOptions;
 use wry::RequestAsyncResponder;
-use wry::http::{Method, Request, Response, StatusCode};
+use wry::http::{Method, Response, StatusCode};
 
 use crate::PROJECT;
-use crate::utils::http::http_err;
+use crate::utils::http::{RequestData, ResponseData, http_err};
 
 // NOTE: Storage currently panics on underlying fjall errors
 
@@ -33,9 +33,12 @@ impl Storage {
     }
 
     // Opens a save. If such a save does not exist, it will be created
-    fn open_save(&self, name: &str) -> Result<Save> {
-        let table = self.db.keyspace(name, KeyspaceCreateOptions::default)?;
-        Ok(Save { table })
+    fn open_save(&self, name: &str) -> Save {
+        let table = self
+            .db
+            .keyspace(name, KeyspaceCreateOptions::default)
+            .expect("Storage error on open");
+        Save { table }
     }
 
     // TODO: this is very memory-inefficient
@@ -68,35 +71,55 @@ impl Save {
     }
 }
 
-pub fn create_storage_handler() -> Result<impl Fn(&str, Request<Vec<u8>>, RequestAsyncResponder)> {
-    let storage = Storage::open_in_appdata()?;
+struct StorageMessage {
+    req: RequestData,
+    ret: RequestAsyncResponder,
+}
 
-    let handler =
-        move |_webview_id: &str, request: Request<Vec<u8>>, ret: RequestAsyncResponder| {
-            let Some(save_name) = request.uri().host() else {
-                tracing::warn!("Storage interaction without a specified save, ignoring");
-                return;
-            };
+fn handle_message(storage: &Storage, request: RequestData) -> Option<ResponseData> {
+    let Some(save_name) = request.uri().host() else {
+        tracing::warn!("Storage interaction without a specified save, ignoring");
+        return None;
+    };
 
-            // TODO: do not reopen saves on each access
-            let save = storage.open_save(save_name).unwrap(); // TODO: merge web-error from another project
+    // TODO: do not reopen saves on each access
+    let save = storage.open_save(save_name);
 
-            let key = request.uri().path();
+    let key = request.uri().path();
 
-            // TODO: never block the handling thread
+    Some(match *request.method() {
+        Method::GET => match save.read(key) {
+            Some(data) => Response::new(Cow::Owned(data)),
+            None => http_err(StatusCode::NOT_FOUND),
+        },
+        Method::POST => {
+            let value = request.body();
+            save.write(key, value);
+            return None;
+        }
+        _ => http_err(StatusCode::METHOD_NOT_ALLOWED),
+    })
+}
 
-            match *request.method() {
-                Method::GET => match save.read(key) {
-                    Some(data) => ret.respond(Response::new(Cow::Owned(data))),
-                    None => ret.respond(http_err(StatusCode::NOT_FOUND)),
-                },
-                Method::POST => {
-                    let value = request.body();
-                    save.write(key, value);
+pub fn create_storage_handler() -> impl Fn(&str, RequestData, RequestAsyncResponder) {
+    let (tx, rx) = std::sync::mpsc::channel::<StorageMessage>();
+
+    std::thread::Builder::new()
+        .name("storage".to_string())
+        .spawn(move || {
+            let storage = Storage::open_in_appdata().unwrap();
+            for msg in rx.iter() {
+                let ret = handle_message(&storage, msg.req);
+
+                if let Some(ret) = ret {
+                    msg.ret.respond(ret);
                 }
-                _ => ret.respond(http_err(StatusCode::METHOD_NOT_ALLOWED)),
             }
-        };
+        })
+        .expect("Failed to run storage thread");
 
-    Ok(handler)
+    move |_webview_id: &str, req: RequestData, ret: RequestAsyncResponder| {
+        tx.send(StorageMessage { req, ret })
+            .expect("Cannot queue storage operation")
+    }
 }

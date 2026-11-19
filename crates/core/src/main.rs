@@ -115,7 +115,7 @@ fn main() -> Result<()> {
     let window = create_window(&event_loop)?;
     let ipc_host = create_ipc_host();
     let asset_handler = create_asset_handler();
-    let storage_handler = create_storage_handler()?;
+    let storage_handler = create_storage_handler();
 
     let webview_settings = WebViewBuilder::new()
         .with_url(location_url(0))

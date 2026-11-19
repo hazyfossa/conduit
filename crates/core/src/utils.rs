@@ -22,12 +22,13 @@ pub mod warn {
 pub mod http {
     use std::borrow::Cow;
 
-    use wry::http::{Response, StatusCode};
+    use wry::http::{Request, Response, StatusCode};
 
-    pub type Data = Cow<'static, [u8]>;
+    pub type RequestData = Request<Vec<u8>>;
+    pub type ResponseData = Response<Cow<'static, [u8]>>;
 
-    pub fn http_err(status: StatusCode) -> Response<Data> {
-        let empty = Data::Owned(Vec::new());
+    pub fn http_err(status: StatusCode) -> ResponseData {
+        let empty = Cow::Owned(Vec::new());
         Response::builder().status(status).body(empty).unwrap()
     }
 }

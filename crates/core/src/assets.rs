@@ -1,13 +1,11 @@
 use crate::{
     PROJECT,
-    utils::http::{Data, http_err},
+    utils::http::{RequestData, ResponseData, http_err},
 };
-use wry::http::{HeaderValue, Method, Request, Response, StatusCode, header::CONTENT_TYPE};
+use wry::http::{HeaderValue, Method, Response, StatusCode, header::CONTENT_TYPE};
 
-type AssetRequest = Request<Vec<u8>>;
-
-pub fn create_asset_handler() -> impl Fn(&str, AssetRequest) -> Response<Data> {
-    move |_webview_id: &str, request: AssetRequest| {
+pub fn create_asset_handler() -> impl Fn(&str, RequestData) -> ResponseData {
+    move |_webview_id: &str, request: RequestData| {
         if request.method() != Method::GET {
             return http_err(StatusCode::METHOD_NOT_ALLOWED);
         }
