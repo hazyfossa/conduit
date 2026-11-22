@@ -34,7 +34,7 @@ fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindow
     NewWindowResponse::Deny
 }
 
-static PROJECT: LazyLock<Project> = LazyLock::new(|| {
+static PROJECT: LazyLock<&'static Project> = LazyLock::new(|| {
     const CONDUIT_VERSION: &str = env!("CARGO_PKG_VERSION");
     const CONDUIT_BUILD_ID: u64 = const_random::const_random!(u64);
 
@@ -49,8 +49,8 @@ static PROJECT: LazyLock<Project> = LazyLock::new(|| {
         .and_then(Project::load_from_bytes)
         .expect("Failed to load bundled project");
 
-    let name = &project.manifest.name;
-    let version = &project.manifest.version;
+    let name = &project.name;
+    let version = &project.version;
 
     tracing::info!(
         "Running [{name}-{version}-{build_kind}] using [conduit-{CONDUIT_VERSION}-{CONDUIT_BUILD_ID:x}]"

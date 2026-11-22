@@ -4,39 +4,31 @@ use camino::{Utf8Component, Utf8Path};
 use rkyv::{Archive, Serialize};
 
 #[derive(Archive, Serialize)]
-struct File {
+pub struct File {
     path: String,
     mime_type: Option<String>,
     data: Vec<u8>,
 }
 
-pub struct Asset<'a> {
-    file: &'a ArchivedFile,
-}
-
-impl<'a> Asset<'a> {
-    pub fn data(&self) -> &'a [u8] {
-        &self.file.data
+impl ArchivedFile {
+    pub fn data(&self) -> &[u8] {
+        &self.data
     }
 
-    pub fn mimetype(&self) -> Option<&'a str> {
-        self.file.mime_type.as_ref().map(|m| m.as_str())
+    pub fn mimetype(&self) -> Option<&str> {
+        self.mime_type.as_ref().map(|m| m.as_str())
     }
 }
 
 #[derive(Archive, Serialize)]
 #[allow(unused, reason = "only the archived variant is used")]
-pub(crate) struct Directory {
+pub struct Directory {
     entries: Vec<File>,
 }
 
-pub struct Assets<'a> {
-    pub(crate) dir: &'a ArchivedDirectory,
-}
-
-impl<'a> Assets<'a> {
-    pub fn get(&self, path: &str) -> Option<Asset<'a>> {
-        let entries = &self.dir.entries;
+impl ArchivedDirectory {
+    pub fn get(&self, path: &str) -> Option<&ArchivedFile> {
+        let entries = &self.entries;
 
         let idx = entries
             .binary_search_by(|e| cmp_key_path(e.path.as_str(), &path))
@@ -44,16 +36,15 @@ impl<'a> Assets<'a> {
 
         let file = &entries[idx];
 
-        Some(Asset { file })
+        Some(file)
     }
 
     pub fn len(&self) -> usize {
-        self.dir.entries.len()
+        self.entries.len()
     }
 
-    pub fn iter_all(&self) -> impl Iterator<Item = (&'a str, &'a [u8])> {
-        self.dir
-            .entries
+    pub fn iter_all(&self) -> impl Iterator<Item = (&str, &[u8])> {
+        self.entries
             .iter()
             .map(|e| (e.path.as_str(), e.data.as_slice()))
     }
