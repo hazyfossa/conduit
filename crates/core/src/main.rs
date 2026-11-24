@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use std::sync::{LazyLock, OnceLock};
 
 use conduit_common::Project;
@@ -8,6 +10,7 @@ use tao::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Theme, Window, WindowBuilder},
 };
+
 use wry::{NewWindowFeatures, NewWindowResponse, WebView, WebViewBuilder};
 
 use crate::{
@@ -117,7 +120,15 @@ fn run_loop(event_loop: EventLoop<()>) -> ! {
 }
 
 fn init_tracing() {
-    tracing_subscriber::fmt().init();
+    use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
+    use winwin::tracing_layer::WinDebug;
+
+    let layer = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_writer(WinDebug)
+        .with_filter(WinDebug);
+
+    tracing_subscriber::registry().with(layer).init();
 }
 
 fn location_url(id: u8) -> String {

@@ -3544,6 +3544,8 @@ dependencies = [
  "bon",
  "pastey",
  "raw-window-handle",
+ "tracing-core",
+ "tracing-subscriber",
  "windows",
 ]
 
