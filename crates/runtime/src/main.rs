@@ -1,17 +1,22 @@
 #![windows_subsystem = "windows"]
+use std::sync::OnceLock;
 
-use std::sync::{LazyLock, OnceLock};
+use conduit_common::{Project, ProjectData};
+use eyre::{Context, OptionExt, Result};
 
-use conduit_common::Project;
-use eyre::{Context, Result};
-use tao::{
+use winit::{
+    application::ApplicationHandler,
     dpi::PhysicalSize,
-    event::{Event as SystemEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
-    window::{Theme, Window, WindowBuilder},
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, EventLoop},
+    window::{Theme, Window, WindowId},
 };
 
-use wry::{NewWindowFeatures, NewWindowResponse, WebView, WebViewBuilder};
+use winwin::blob::ResourceKind;
+use wry::{
+    NewWindowFeatures, NewWindowResponse, Rect, WebView, WebViewBuilder,
+    dpi::{LogicalPosition, LogicalSize},
+};
 
 use crate::{
     actions::create_ipc_host,
@@ -37,88 +42,142 @@ fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindow
     NewWindowResponse::Deny
 }
 
-static PROJECT: LazyLock<&'static Project> = LazyLock::new(|| {
-    const CONDUIT_VERSION: &str = env!("CARGO_PKG_VERSION");
-    const CONDUIT_BUILD_ID: u64 = const_random::const_random!(u64);
+fn load_project_blob() -> Result<Project> {
+    let exe = winwin::blob::CurrentExe::open();
 
-    let build_kind = if Project::is_debug() {
-        "debug"
-    } else {
-        "release"
-    };
+    let project_resource = exe
+        .resources()
+        .open(ResourceKind::Data, "CONDUIT")
+        .ok_or_eyre("Primary resource not found")?;
 
-    let project = winwin::blob::load_resouse_blob("CONDUIT")
-        .map_err(eyre::Error::from)
-        .and_then(Project::load_from_bytes)
-        .expect("Failed to load bundled project");
+    let project_bytes = project_resource
+        .load_bytes()
+        .context("Failed to load primary resource")?;
 
-    let name = &project.name;
-    let version = &project.version;
+    ProjectData::load_from_bytes(project_bytes).context("Primary resource is corrupted")
+}
 
-    tracing::info!(
-        "Running [{name}-{version}-{build_kind}] using [conduit-{CONDUIT_VERSION}-{CONDUIT_BUILD_ID:x}]"
-    );
+struct App {
+    project: Project,
+    window: Option<Window>,
+    webview: Option<WebView>,
+}
 
-    project
-});
+impl App {
+    fn load() -> Result<Self> {
+        const CONDUIT_VERSION: &str = env!("CARGO_PKG_VERSION");
+        const CONDUIT_BUILD_ID: u64 = const_random::const_random!(u64);
 
-fn create_window(event_loop: &EventLoop<()>) -> Result<&Window> {
-    let title = PROJECT.name.to_string();
-    let size = PhysicalSize::new(PROJECT.width.to_native(), PROJECT.height.to_native());
-    let fullscreen = false; // TODO: settings
+        let build_kind = if ProjectData::is_debug() {
+            "debug"
+        } else {
+            "release"
+        };
 
-    let window = WindowBuilder::new()
-        .with_title(title)
-        .with_inner_size(size)
-        .with_focused(true)
-        .with_theme(Some(Theme::Dark)) // TODO
-        .with_fullscreen(maybe_fullscreen(fullscreen))
-        .build(event_loop)
-        .context("Failed to create window")?;
+        let project = load_project_blob()?;
 
-    // TODO: confirm no performance impact from winwin on main loop
-    lock_aspect_ratio(&window);
+        let name = &project.name;
+        let version = &project.version;
 
-    if PROJECT.custom_cursor {
-        window.set_cursor_visible(false);
+        tracing::info!(
+            "Running [{name}-{version}-{build_kind}] using [conduit-{CONDUIT_VERSION}-{CONDUIT_BUILD_ID:x}]"
+        );
+
+        Ok(Self {
+            project,
+            window: None,
+            webview: None,
+        })
     }
 
-    let _ = WINDOW.set(window);
-    Ok(current_window())
+    fn create_webview(&mut self) -> Result<()> {
+        let window = &self
+            .window
+            .as_ref()
+            .ok_or_eyre("No window is currently open")?;
+
+        let index_url = format!("bundled://{}", self.project.index);
+
+        let ipc_host = create_ipc_host();
+        let asset_handler = create_asset_handler(self.project);
+        let storage_handler = create_storage_handler(self.project);
+
+        let webview_settings = WebViewBuilder::new()
+            .with_url(index_url)
+            .with_ipc_handler(ipc_host)
+            .with_custom_protocol("bundled".to_string(), asset_handler)
+            .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
+            .with_new_window_req_handler(handle_window_request)
+            .with_devtools(ProjectData::is_debug());
+
+        let webview = webview_settings.build(window)?;
+        self.webview.replace(webview);
+
+        Ok(())
+    }
 }
 
-fn create_webview() -> Result<WebView> {
-    let index_url = format!("bundled://{}", PROJECT.index);
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let title = self.project.name.to_string();
+        let size = PhysicalSize::new(
+            self.project.width.to_native(),
+            self.project.height.to_native(),
+        );
 
-    let ipc_host = create_ipc_host();
-    let asset_handler = create_asset_handler();
-    let storage_handler = create_storage_handler();
+        let fullscreen = false; // TODO: settings
 
-    let webview_settings = WebViewBuilder::new()
-        .with_url(index_url)
-        .with_ipc_handler(ipc_host)
-        .with_custom_protocol("bundled".to_string(), asset_handler)
-        .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
-        .with_new_window_req_handler(handle_window_request)
-        .with_devtools(Project::is_debug());
+        let window_attributes = Window::default_attributes()
+            .with_title(title)
+            .with_inner_size(size)
+            // .with_focused(true)
+            .with_theme(Some(Theme::Dark)) // TODO
+            .with_fullscreen(maybe_fullscreen(fullscreen));
 
-    webview_settings
-        .build(current_window())
-        .context("Webview init failed")
-}
+        let window = event_loop
+            .create_window(window_attributes)
+            .context("Failed to create window")
+            .unwrap();
 
-fn run_loop(event_loop: EventLoop<()>) -> ! {
-    event_loop.run(move |event, _t, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        lock_aspect_ratio(&window);
 
+        if self.project.custom_cursor {
+            window.set_cursor_visible(false);
+        }
+
+        self.window.replace(window);
+
+        self.create_webview()
+            .context("Failed to create webview")
+            .unwrap();
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
         match event {
-            SystemEvent::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => *control_flow = ControlFlow::Exit,
+            WindowEvent::Resized(size) => {
+                let window = self.window.as_ref().unwrap();
+                let webview = self.webview.as_ref().unwrap();
+
+                let size = size.to_logical::<u32>(window.scale_factor());
+
+                webview
+                    .set_bounds(Rect {
+                        position: LogicalPosition::new(0, 0).into(),
+                        size: LogicalSize::new(size.width, size.height).into(),
+                    })
+                    .unwrap();
+            }
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
             _ => {}
         }
-    })
+    }
 }
 
 fn init_tracing() {
@@ -136,10 +195,9 @@ fn init_tracing() {
 fn main() -> Result<()> {
     init_tracing();
 
-    let event_loop = EventLoopBuilder::new().build();
+    let event_loop = EventLoop::new().context("Failed to build event loop")?;
+    let mut app = App::load()?;
+    event_loop.run_app(&mut app)?;
 
-    let _window = create_window(&event_loop)?;
-    let _webview = create_webview();
-
-    run_loop(event_loop)
+    Ok(())
 }

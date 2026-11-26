@@ -12,20 +12,20 @@ pub mod blob;
 pub mod manifest;
 
 #[derive(Archive, Serialize)]
-#[rkyv(archived = Project)]
+#[rkyv(archived = ProjectData)]
 pub struct ProjectBuilder {
     pub assets: Directory,
     manifest: Manifest,
 }
 
-impl Deref for Project {
+impl Deref for ProjectData {
     type Target = ArchivedManifest;
     fn deref(&self) -> &Self::Target {
         &self.manifest
     }
 }
 
-impl Project {
+impl ProjectData {
     pub fn load_from_bytes<'a>(bytes: &'a [u8]) -> Result<&'a Self> {
         rkyv::access::<Self, rkyv::rancor::Error>(bytes).context("Data decoding error")
     }
@@ -36,3 +36,5 @@ impl Project {
         #[cfg(not(debug_assertions))] { false }
     }
 }
+
+pub type Project = &'static ProjectData;

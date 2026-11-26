@@ -1,7 +1,6 @@
 use eyre::{Context, Result};
 use serde::Deserialize;
-use tao::dpi::LogicalSize;
-use wry::http::Request;
+use wry::{dpi::PhysicalSize, http::Request};
 
 use crate::{
     current_window,
@@ -40,7 +39,8 @@ impl Action for WindowAction {
 
         match self {
             WindowAction::Resize { width, height } => {
-                window.set_inner_size(LogicalSize::new(*width, *height))
+                // best-effort
+                let _ = window.request_inner_size(PhysicalSize::new(*width, *height));
             }
             WindowAction::SetFullscreen(value) => {
                 window.set_fullscreen(maybe_fullscreen(*value));

@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::path::PathBuf;
 
+use conduit_common::Project;
 use eyre::Result;
 use fjall::KeyspaceCreateOptions;
 use wry::RequestAsyncResponder;
 use wry::http::{Method, Response, StatusCode};
 
-use crate::PROJECT;
 use crate::utils::http::{RequestData, ResponseData, http_err};
 
 // NOTE: Storage currently panics on underlying fjall errors
@@ -16,12 +16,12 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn open_in_appdata() -> Result<Self> {
+    pub fn open_in_appdata(project: Project) -> Result<Self> {
         let path = std::env::var_os("APPDATA")
             .map(PathBuf::from)
             .expect("Cannot get APPDATA path from environment");
 
-        let project_name = PROJECT.name.as_str();
+        let project_name = project.name.as_str();
         let path = path.join(project_name).join("savefile");
 
         Self::open(path)
@@ -102,13 +102,15 @@ fn handle_message(storage: &Storage, request: RequestData) -> Option<ResponseDat
     })
 }
 
-pub fn create_storage_handler() -> impl Fn(&str, RequestData, RequestAsyncResponder) {
+pub fn create_storage_handler(
+    project: Project,
+) -> impl Fn(&str, RequestData, RequestAsyncResponder) {
     let (tx, rx) = std::sync::mpsc::channel::<StorageMessage>();
 
     std::thread::Builder::new()
         .name("storage".to_string())
         .spawn(move || {
-            let storage = Storage::open_in_appdata().unwrap();
+            let storage = Storage::open_in_appdata(project).unwrap();
             for msg in rx.iter() {
                 let ret = handle_message(&storage, msg.req);
 

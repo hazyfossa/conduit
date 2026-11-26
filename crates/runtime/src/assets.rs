@@ -1,10 +1,8 @@
-use crate::{
-    PROJECT,
-    utils::http::{RequestData, ResponseData, http_err},
-};
+use crate::utils::http::{RequestData, ResponseData, http_err};
+use conduit_common::Project;
 use wry::http::{HeaderValue, Method, Response, StatusCode, header::CONTENT_TYPE};
 
-pub fn create_asset_handler() -> impl Fn(&str, RequestData) -> ResponseData {
+pub fn create_asset_handler(project: Project) -> impl Fn(&str, RequestData) -> ResponseData {
     move |_webview_id: &str, request: RequestData| {
         if request.method() != Method::GET {
             return http_err(StatusCode::METHOD_NOT_ALLOWED);
@@ -22,7 +20,7 @@ pub fn create_asset_handler() -> impl Fn(&str, RequestData) -> ResponseData {
             path.push_str("index.html");
         }
 
-        match PROJECT.assets.get(&path) {
+        match project.assets.get(&path) {
             Some(file) => {
                 let mut response = Response::new(file.data().into());
 

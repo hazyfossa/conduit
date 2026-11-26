@@ -11,9 +11,9 @@ fjall = { version = "3.1.13", default-features = false }
 rust-embed = { version = "8.14.0", features = ["mime-guess"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-tao = "0.37.2"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 typetag = "0.2.23"
+winit = { version = "0.30.13", default-features = false, features = ["rwh_06"] }
 winwin = { version = "0.1.0", path = "../../../winwin", features = ["blob", "lock-aspect-ratio", "messagebox", "tracing-layer"] }
 wry = { version = "0.57.2", features = ["tracing"] }

@@ -34,7 +34,7 @@ pub mod http {
 }
 
 pub mod window {
-    use tao::window::{Fullscreen, Window};
+    use winit::window::{Fullscreen, Window};
 
     pub fn maybe_fullscreen(value: bool) -> Option<Fullscreen> {
         value.then_some(Fullscreen::Borderless(None))
