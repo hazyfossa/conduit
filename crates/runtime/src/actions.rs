@@ -3,25 +3,29 @@ use serde::Deserialize;
 use wry::{dpi::PhysicalSize, http::Request};
 
 use crate::{
-    current_window,
+    App, EVENT_LOOP,
     utils::{warn::WarnExt, window::maybe_fullscreen},
 };
 
+pub type ActionEvent = Box<dyn Action>;
+
 pub fn create_ipc_host() -> impl Fn(Request<String>) {
+    let event_loop = EVENT_LOOP.get().unwrap();
+
     move |message: Request<String>| {
         let action: Option<Box<dyn Action>> = serde_json::from_str(message.body())
             .context("Invalid action message")
             .warn();
 
         if let Some(action) = action {
-            action.handle().warn();
+            let _ = event_loop.send_event(action);
         }
     }
 }
 
 #[typetag::deserialize(tag = "target")]
-pub trait Action {
-    fn handle(&self) -> Result<()>;
+pub trait Action: Send + Sync + 'static {
+    fn handle(&self, app: &mut App) -> Result<()>;
 }
 
 #[derive(Deserialize)]
@@ -34,8 +38,8 @@ pub enum WindowAction {
 
 #[typetag::deserialize]
 impl Action for WindowAction {
-    fn handle(&self) -> Result<()> {
-        let window = current_window();
+    fn handle(&self, app: &mut App) -> Result<()> {
+        let window = app.current_window()?;
 
         match self {
             WindowAction::Resize { width, height } => {

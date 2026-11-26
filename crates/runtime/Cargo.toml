@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arc-swap = "1.9.5"
 conduit-common = { version = "0.1.0", path = "../common" }
 const-random = "0.1.18"
 eyre = "0.6.14"

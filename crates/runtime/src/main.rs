@@ -8,7 +8,7 @@ use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
     event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop},
+    event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy},
     window::{Theme, Window, WindowId},
 };
 
@@ -19,21 +19,19 @@ use wry::{
 };
 
 use crate::{
-    actions::create_ipc_host,
+    actions::{ActionEvent, create_ipc_host},
     assets::create_asset_handler,
     storage::create_storage_handler,
-    utils::window::{lock_aspect_ratio, maybe_fullscreen},
+    utils::{
+        warn::WarnExt,
+        window::{lock_aspect_ratio, maybe_fullscreen},
+    },
 };
 
 mod actions;
 mod assets;
 mod storage;
 mod utils;
-
-static WINDOW: OnceLock<Window> = OnceLock::new();
-fn current_window() -> &'static Window {
-    WINDOW.get().expect("Primary window not initialized")
-}
 
 fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindowResponse {
     tracing::error!(
@@ -57,14 +55,14 @@ fn load_project_blob() -> Result<Project> {
     ProjectData::load_from_bytes(project_bytes).context("Primary resource is corrupted")
 }
 
-struct App {
+pub struct App {
     project: Project,
     window: Option<Window>,
     webview: Option<WebView>,
 }
 
 impl App {
-    fn load() -> Result<Self> {
+    fn load(project: Project) -> Self {
         const CONDUIT_VERSION: &str = env!("CARGO_PKG_VERSION");
         const CONDUIT_BUILD_ID: u64 = const_random::const_random!(u64);
 
@@ -74,8 +72,6 @@ impl App {
             "release"
         };
 
-        let project = load_project_blob()?;
-
         let name = &project.name;
         let version = &project.version;
 
@@ -83,18 +79,15 @@ impl App {
             "Running [{name}-{version}-{build_kind}] using [conduit-{CONDUIT_VERSION}-{CONDUIT_BUILD_ID:x}]"
         );
 
-        Ok(Self {
+        Self {
             project,
-            window: None,
+            window: None.into(),
             webview: None,
-        })
+        }
     }
 
     fn create_webview(&mut self) -> Result<()> {
-        let window = &self
-            .window
-            .as_ref()
-            .ok_or_eyre("No window is currently open")?;
+        let window = &self.current_window()?;
 
         let index_url = format!("bundled://{}", self.project.index);
 
@@ -115,9 +108,15 @@ impl App {
 
         Ok(())
     }
+
+    pub fn current_window(&self) -> Result<&Window> {
+        self.window
+            .as_ref()
+            .ok_or_eyre("No window is currently open")
+    }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<ActionEvent> for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let title = self.project.name.to_string();
         let size = PhysicalSize::new(
@@ -178,9 +177,13 @@ impl ApplicationHandler for App {
             _ => {}
         }
     }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: ActionEvent) {
+        event.handle(self).warn();
+    }
 }
 
-fn init_tracing() {
+pub fn init_tracing() {
     use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
     use winwin::tracing_layer::WinDebug;
 
@@ -192,11 +195,26 @@ fn init_tracing() {
     tracing_subscriber::registry().with(layer).init();
 }
 
+pub static EVENT_LOOP: OnceLock<EventLoopProxy<ActionEvent>> = OnceLock::new();
+
+fn init_event_loop() -> Result<EventLoop<ActionEvent>> {
+    let event_loop = EventLoop::with_user_event()
+        .build()
+        .context("Failed to build event loop")?;
+
+    let proxy = event_loop.create_proxy();
+    let _ = EVENT_LOOP.set(proxy);
+
+    Ok(event_loop)
+}
+
 fn main() -> Result<()> {
     init_tracing();
 
-    let event_loop = EventLoop::new().context("Failed to build event loop")?;
-    let mut app = App::load()?;
+    let project = load_project_blob()?;
+    let mut app = App::load(project);
+
+    let event_loop = init_event_loop()?;
     event_loop.run_app(&mut app)?;
 
     Ok(())
