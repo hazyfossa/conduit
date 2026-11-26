@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use std::sync::{LazyLock, OnceLock};
 
 use conduit_common::Project;
@@ -8,6 +10,7 @@ use tao::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
     window::{Theme, Window, WindowBuilder},
 };
+
 use wry::{NewWindowFeatures, NewWindowResponse, WebView, WebViewBuilder};
 
 use crate::{
@@ -85,12 +88,14 @@ fn create_window(event_loop: &EventLoop<()>) -> Result<&Window> {
 }
 
 fn create_webview() -> Result<WebView> {
+    let index_url = format!("bundled://{}", PROJECT.index);
+
     let ipc_host = create_ipc_host();
     let asset_handler = create_asset_handler();
     let storage_handler = create_storage_handler();
 
     let webview_settings = WebViewBuilder::new()
-        .with_url(location_url(0))
+        .with_url(index_url)
         .with_ipc_handler(ipc_host)
         .with_custom_protocol("bundled".to_string(), asset_handler)
         .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
@@ -117,11 +122,15 @@ fn run_loop(event_loop: EventLoop<()>) -> ! {
 }
 
 fn init_tracing() {
-    tracing_subscriber::fmt().init();
-}
+    use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
+    use winwin::tracing_layer::WinDebug;
 
-fn location_url(id: u8) -> String {
-    format!("bundled://location{id}/index.html")
+    let layer = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_writer(WinDebug)
+        .with_filter(WinDebug);
+
+    tracing_subscriber::registry().with(layer).init();
 }
 
 fn main() -> Result<()> {
