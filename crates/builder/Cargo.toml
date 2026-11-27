@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 argh = "0.1.19"
 conduit-common = { version = "0.1.0", path = "../common", features = ["blob-write"] }
+eyre = "0.6.14"
+winwin = { version = "0.1.0", path = "../../../winwin", features = ["blob"] }

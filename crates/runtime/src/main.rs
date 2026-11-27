@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 use std::sync::OnceLock;
 
-use conduit_common::{Project, ProjectData};
+use conduit_common::{Project, ProjectData, RESOURCE_ID};
 use eyre::{Context, OptionExt, Result};
 
 use winit::{
@@ -12,7 +12,7 @@ use winit::{
     window::{Theme, Window, WindowId},
 };
 
-use winwin::blob::ResourceKind;
+use winwin::blob::{ResourceKind, current_resources};
 use wry::{
     NewWindowFeatures, NewWindowResponse, Rect, WebView, WebViewBuilder,
     dpi::{LogicalPosition, LogicalSize},
@@ -41,11 +41,8 @@ fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindow
 }
 
 fn load_project_blob() -> Result<Project> {
-    let exe = winwin::blob::CurrentExe::open();
-
-    let project_resource = exe
-        .resources()
-        .open(ResourceKind::Data, "CONDUIT")
+    let project_resource = current_resources()
+        .open(ResourceKind::Data, RESOURCE_ID)
         .ok_or_eyre("Primary resource not found")?;
 
     let project_bytes = project_resource
@@ -66,7 +63,7 @@ impl App {
         const CONDUIT_VERSION: &str = env!("CARGO_PKG_VERSION");
         const CONDUIT_BUILD_ID: u64 = const_random::const_random!(u64);
 
-        let build_kind = if ProjectData::is_debug() {
+        let build_kind = if project.is_debug() {
             "debug"
         } else {
             "release"
@@ -101,7 +98,7 @@ impl App {
             .with_custom_protocol("bundled".to_string(), asset_handler)
             .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
             .with_new_window_req_handler(handle_window_request)
-            .with_devtools(ProjectData::is_debug());
+            .with_devtools(self.project.is_debug());
 
         let webview = webview_settings.build(window)?;
         self.webview.replace(webview);

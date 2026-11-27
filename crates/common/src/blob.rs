@@ -100,7 +100,7 @@ pub mod write {
         })
     }
 
-    pub fn encode_dir(root: &Utf8Path) -> Result<AlignedVec> {
+    pub fn encode_dir(root: &Utf8Path) -> Result<Directory> {
         let mut entries = Vec::new();
         let mut stack = vec![root.to_path_buf()];
 
@@ -121,8 +121,7 @@ pub mod write {
 
         entries.sort_unstable_by(|a, b| a.path.split('/').cmp(b.path.split('/')));
 
-        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&Directory { entries })?;
-        Ok(bytes)
+        Ok(Directory { entries })
     }
 
     fn relative_key(rel: &Utf8Path) -> String {
