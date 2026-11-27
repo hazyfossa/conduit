@@ -12,7 +12,7 @@ use winit::{
     window::{Theme, Window, WindowId},
 };
 
-use winwin::blob::{ResourceKind, current_resources};
+use winwin::resources::{current_resources, resource_kind};
 use wry::{
     NewWindowFeatures, NewWindowResponse, Rect, WebView, WebViewBuilder,
     dpi::{LogicalPosition, LogicalSize},
@@ -42,14 +42,10 @@ fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindow
 
 fn load_project_blob() -> Result<Project> {
     let project_resource = current_resources()
-        .open(ResourceKind::Data, RESOURCE_ID)
+        .open::<resource_kind::Data>(RESOURCE_ID)?
         .ok_or_eyre("Primary resource not found")?;
 
-    let project_bytes = project_resource
-        .load_bytes()
-        .context("Failed to load primary resource")?;
-
-    ProjectData::load_from_bytes(project_bytes).context("Primary resource is corrupted")
+    ProjectData::load_from_bytes(project_resource).context("Primary resource is corrupted")
 }
 
 pub struct App {

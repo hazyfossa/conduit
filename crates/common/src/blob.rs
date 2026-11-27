@@ -79,7 +79,6 @@ pub mod write {
     use camino::Utf8PathBuf;
     use eyre::{Context, Result};
     use fs_err as fs;
-    use rkyv::util::AlignedVec;
 
     use super::*;
 

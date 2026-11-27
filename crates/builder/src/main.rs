@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use argh::FromArgs;
 use conduit_common::{Manifest, RESOURCE_ID, bundle_project};
 use eyre::{Context, Result};
-use winwin::blob::{ResourceKind, ResourceUpdateTx};
+use winwin::resources::{ResourceUpdateTx, resource_kind};
 
 #[derive(FromArgs)]
 /// Package a web application into a single .exe
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
     std::fs::copy(&args.runtime, &args.target).context("Failed to write target.exe")?;
 
     let mut runtime = ResourceUpdateTx::open(&args.target, true)?;
-    runtime.write(ResourceKind::Data, RESOURCE_ID, &project_bundle)?;
+    runtime.write::<resource_kind::Data>(RESOURCE_ID, &project_bundle)?;
     runtime.commit()?;
 
     Ok(())
