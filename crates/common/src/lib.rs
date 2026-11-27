@@ -45,7 +45,6 @@ impl ProjectData {
         rkyv::access::<Self, rkyv::rancor::Error>(bytes).context("Data decoding error")
     }
 
-    #[rustfmt::skip]
     pub fn is_debug(&self) -> bool {
         !self.release
     }

@@ -23,7 +23,7 @@ struct Args {
     name: String,
     /// project's version, an arbitrary string
     #[argh(option)]
-    version: String, // TODO: read from windows' native resource
+    version: String,
     /// release flag
     #[argh(switch)]
     release: bool,

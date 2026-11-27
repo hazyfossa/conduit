@@ -122,7 +122,6 @@ impl ApplicationHandler<ActionEvent> for App {
         let window_attributes = Window::default_attributes()
             .with_title(title)
             .with_inner_size(size)
-            // .with_focused(true)
             .with_theme(Some(Theme::Dark)) // TODO
             .with_fullscreen(maybe_fullscreen(fullscreen));
 
