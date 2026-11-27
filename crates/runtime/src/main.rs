@@ -21,7 +21,7 @@ use wry::{
 use crate::{
     actions::{ActionEvent, create_ipc_host},
     assets::create_asset_handler,
-    storage::create_storage_handler,
+    // storage::create_storage_handler,
     utils::{
         warn::WarnExt,
         window::{lock_aspect_ratio, maybe_fullscreen},
@@ -30,7 +30,7 @@ use crate::{
 
 mod actions;
 mod assets;
-mod storage;
+// mod storage;
 mod utils;
 
 fn handle_window_request(url: String, _features: NewWindowFeatures) -> NewWindowResponse {
@@ -86,13 +86,13 @@ impl App {
 
         let ipc_host = create_ipc_host();
         let asset_handler = create_asset_handler(self.project);
-        let storage_handler = create_storage_handler(self.project);
+        // let storage_handler = create_storage_handler(self.project);
 
         let webview_settings = WebViewBuilder::new()
             .with_url(index_url)
             .with_ipc_handler(ipc_host)
             .with_custom_protocol("bundled".to_string(), asset_handler)
-            .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
+            // .with_asynchronous_custom_protocol("state".to_string(), storage_handler)
             .with_new_window_req_handler(handle_window_request)
             .with_devtools(self.project.is_debug());
 
